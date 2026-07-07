@@ -15,17 +15,17 @@ func child(args []string) {
 	containerDir := args[1]
 	command := args[2:]
 
-	// My own hostname; the host's is untouched (UTS namespace).
+	// Our own hostname; the host's is untouched (UTS namespace).
 	must(syscall.Sethostname([]byte("container")))
 
 	// Build the copy-on-write root and pivot into it.
 	must(setupRootfs(image, containerDir))
 
-	// Mount the virtual filesystems now that I'm in the new root.
+	// Mount the virtual filesystems now that we're in the new root.
 	must(mountProc())
 	must(mountDev())
 
-	// Block until the parent has wired up my network. Until then the netns only
+	// Block until the parent has wired up our network. Until then the netns only
 	// has a down loopback.
 	waitForNetwork()
 
@@ -39,7 +39,7 @@ func child(args []string) {
 	must(syscall.Exec(path, command, os.Environ()))
 }
 
-// setupRootfs stacks an overlay and pivots into it. I keep the image as a shared
+// setupRootfs stacks an overlay and pivots into it. We keep the image as a shared
 // read-only lower layer and send each container's writes to its own upper, so the
 // image never changes and containers can't see each other's writes.
 func setupRootfs(image, containerDir string) error {
@@ -47,13 +47,13 @@ func setupRootfs(image, containerDir string) error {
 	work := filepath.Join(containerDir, "work")
 	merged := filepath.Join(containerDir, "merged")
 
-	// Make mounts private so nothing I do leaks to the host. Also required, or
+	// Make mounts private so nothing we do leaks to the host. Also required, or
 	// pivot_root fails with EINVAL on a shared /.
 	if err := syscall.Mount("", "/", "", syscall.MS_REC|syscall.MS_PRIVATE, ""); err != nil {
 		return fmt.Errorf("make / private: %w", err)
 	}
 
-	// lower = image (read-only), upper = my writes, work = overlay scratch (same
+	// lower = image (read-only), upper = our writes, work = overlay scratch (same
 	// fs as upper). merged is the combined view.
 	opts := fmt.Sprintf("lowerdir=%s,upperdir=%s,workdir=%s", image, upper, work)
 	if err := syscall.Mount("overlay", merged, "overlay", 0, opts); err != nil {
@@ -63,11 +63,11 @@ func setupRootfs(image, containerDir string) error {
 	return pivotRoot(merged)
 }
 
-// pivotRoot makes newroot my / and detaches the old root.
+// pivotRoot makes newroot our / and detaches the old root.
 //
-// I use pivot_root over chroot because chroot only changes where lookups start,
+// We use pivot_root over chroot because chroot only changes where lookups start,
 // and CAP_SYS_ADMIN can escape it. pivot_root swaps the real root mount, and once
-// I unmount the old one there's nothing left to escape to. newroot has to be a
+// we unmount the old one there's nothing left to escape to. newroot has to be a
 // mount point (the overlay mount is) and / has to be private (done above).
 func pivotRoot(newroot string) error {
 	oldroot := filepath.Join(newroot, ".old_root")
@@ -83,7 +83,7 @@ func pivotRoot(newroot string) error {
 		return fmt.Errorf("chdir /: %w", err)
 	}
 
-	// Lazy-unmount the old root and drop the stub so I can't reach the host
+	// Lazy-unmount the old root and drop the stub so we can't reach the host
 	// filesystem from inside.
 	if err := syscall.Unmount("/.old_root", syscall.MNT_DETACH); err != nil {
 		return fmt.Errorf("unmount old root: %w", err)
@@ -94,9 +94,13 @@ func pivotRoot(newroot string) error {
 	return nil
 }
 
-// mountProc mounts a fresh proc so /proc reflects my PID namespace, not the
-// host's. Without it, `ps` still lists host processes.
+// mountProc mounts a fresh proc so /proc reflects our PID namespace, not the
+// host's. Without it, `ps` still lists host processes. Some images (busybox)
+// don't ship a /proc dir, so we create the mountpoint first.
 func mountProc() error {
+	if err := os.MkdirAll("/proc", 0555); err != nil {
+		return fmt.Errorf("mkdir /proc: %w", err)
+	}
 	if err := syscall.Mount("proc", "/proc", "proc", 0, ""); err != nil {
 		return fmt.Errorf("mount /proc: %w", err)
 	}
@@ -105,8 +109,12 @@ func mountProc() error {
 
 // mountDev builds a minimal /dev. Alpine's minirootfs ships /dev empty, so
 // without this even `> /dev/null` fails. A device node is just a file tagged with
-// a (major, minor) pair that the kernel maps to a driver.
+// a (major, minor) pair that the kernel maps to a driver. We create the mountpoint
+// first since not every image includes /dev.
 func mountDev() error {
+	if err := os.MkdirAll("/dev", 0755); err != nil {
+		return fmt.Errorf("mkdir /dev: %w", err)
+	}
 	if err := syscall.Mount("tmpfs", "/dev", "tmpfs", syscall.MS_NOSUID, "mode=0755"); err != nil {
 		return fmt.Errorf("mount /dev: %w", err)
 	}
@@ -133,7 +141,7 @@ func mountDev() error {
 }
 
 // waitForNetwork blocks until the parent closes the sync pipe (eth0 is ready).
-// The parent handed me the read end as my first extra fd (fd 3).
+// The parent handed us the read end as our first extra fd (fd 3).
 func waitForNetwork() {
 	f := os.NewFile(3, "network-sync")
 	if f == nil {
@@ -144,7 +152,7 @@ func waitForNetwork() {
 	_, _ = f.Read(buf[:]) // returns when the parent closes the pipe (EOF)
 }
 
-// writeResolvConf sets my DNS resolvers in the container's own /etc/resolv.conf.
+// writeResolvConf sets our DNS resolvers in the container's own /etc/resolv.conf.
 func writeResolvConf() error {
 	const conf = "nameserver 8.8.8.8\nnameserver 1.1.1.1\n"
 	if err := os.WriteFile("/etc/resolv.conf", []byte(conf), 0644); err != nil {

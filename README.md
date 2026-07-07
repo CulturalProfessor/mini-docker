@@ -21,7 +21,8 @@ Runs a process in a real container with:
   writable layer).
 - **Resource limits** via cgroups v2: memory, CPU, and process count.
 - **Networking**: its own IP on a host bridge, with NAT out to the internet.
-- **A small CLI**: `run`, `ps`, `images`.
+- **Image pull** from Docker Hub over the Registry v2 API.
+- **A small CLI**: `pull`, `run`, `ps`, `images`.
 
 Everything above the shell-outs to `ip`/`iptables`/`nsenter` is built directly on
 the standard library and raw syscalls, no third-party dependencies.
@@ -31,23 +32,22 @@ the standard library and raw syscalls, no third-party dependencies.
 ```sh
 go build -o minidoc .
 
-# One-time: fetch an Alpine rootfs (~3 MB) into images/alpine
-mkdir -p images/alpine
-curl -sL https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/x86_64/ \
-  | grep -o 'alpine-minirootfs-[0-9.]*-x86_64.tar.gz' | sort -uV | tail -1 \
-  | xargs -I{} curl -sL "https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/x86_64/{}" \
-  | tar -xz -C images/alpine
+# Pull an image from Docker Hub into images/
+./minidoc pull alpine
 
-# A shell inside the container
-sudo ./minidoc run ./images/alpine /bin/sh
+# A shell inside the container (by image name)
+sudo ./minidoc run alpine /bin/sh
 
 # With resource limits
-sudo ./minidoc run --memory 100m --cpus 0.5 --pids 64 ./images/alpine /bin/sh
+sudo ./minidoc run --memory 100m --cpus 0.5 --pids 64 alpine /bin/sh
 
 # Networking is automatic: own IP, reaches the internet
-sudo ./minidoc run ./images/alpine ping -c 3 8.8.8.8
-sudo ./minidoc run ./images/alpine wget -qO- http://example.com
+sudo ./minidoc run alpine ping -c 3 8.8.8.8
+sudo ./minidoc run alpine wget -qO- http://example.com
 ```
+
+`run` also accepts a path to any extracted rootfs directory instead of an image
+name.
 
 ## Architecture
 
@@ -58,7 +58,7 @@ sudo ./minidoc run ./images/alpine wget -qO- http://example.com
         |   clone3( CLONE_NEWUTS|NEWPID|NEWNS|NEWIPC|NEWNET , INTO_CGROUP )
         v
   +------------------------------------------------------------+
-  | child  (PID 1 inside)     ns: UTS . PID . MOUNT . IPC . NET |
+  | child  (PID 1 inside)    ns: UTS . PID . MOUNT . IPC . NET |
   |                                                            |
   |   sethostname -> overlay(lower=image, upper, work)         |
   |   -> pivot_root -> mount /proc, /dev                       |
@@ -85,15 +85,17 @@ One concern per file:
 | `child.go` | In-namespace setup: hostname, rootfs, `/proc`, `/dev`, exec. |
 | `cgroup.go` | cgroup v2 creation and limits. |
 | `network.go` | Bridge, veth pair, NAT. |
+| `pull.go` | Pull images from Docker Hub (Registry v2 API). |
 | `state.go`, `commands.go` | Container state and the `ps` / `images` commands. |
 
 ## Commands
 
 | Command | What it does |
 |---------|--------------|
-| `run [--memory 100m] [--cpus 0.5] [--pids 64] <image> <cmd>` | Run `<cmd>` in a fresh container. |
+| `pull <image[:tag]>` | Download an image from Docker Hub into `images/`. |
+| `run [--memory 100m] [--cpus 0.5] [--pids 64] <image> <cmd>` | Run `<cmd>` in a container. `<image>` is a pulled name or a rootfs path. |
 | `ps` | List running containers (id, IP, uptime, command). |
-| `images` | List root filesystems under `images/`. |
+| `images` | List images under `images/`. |
 
 Run `ps` from a second terminal while a container is up:
 
@@ -186,3 +188,15 @@ the state file, and the overlay layers. A JSON file per container under `run/`
 lets `ps` (a separate process) list what's live. Ctrl-C is turned into a
 `SIGKILL` for the container, because a `SIGINT` from the host is ignored by a
 namespaced PID 1 with no handler.
+
+### Pulling images (Registry v2)
+
+`pull` fetches from Docker Hub with the same HTTP API `docker pull` uses. It gets
+a pull-scoped bearer token from `auth.docker.io`, then asks
+`registry-1.docker.io` for the image manifest. Images are multi-arch, so the
+first response is usually an index; we pick the `linux/amd64` entry and fetch that
+manifest, which lists the layer blobs by digest. Each blob is a gzipped tar; we
+stream it through gunzip and untar it into `images/<name>`, verifying its
+`sha256` as it goes and applying overlay whiteouts (`.wh.` files) so deletions in
+upper layers take effect in the flattened rootfs. `run` then treats the result
+like any other rootfs.

@@ -9,7 +9,7 @@ import (
 )
 
 // stateDir holds one JSON file per running container so `minidoc ps` (a separate
-// process) can see what's running. I write a file when a container starts and
+// process) can see what's running. We write a file when a container starts and
 // remove it when it exits.
 const stateDir = "run"
 
@@ -73,8 +73,8 @@ func listStates() ([]containerState, error) {
 }
 
 // pidAlive reports whether a PID still exists. Signal 0 does the kernel's
-// existence/permission check without sending anything: nil means it exists and I
-// can signal it; EPERM means it exists but I can't (e.g. `ps` as non-root against
+// existence/permission check without sending anything: nil means it exists and we
+// can signal it; EPERM means it exists but we can't (e.g. `ps` as non-root against
 // a root container); only ESRCH means it's really gone.
 func pidAlive(pid int) bool {
 	err := syscall.Kill(pid, 0)

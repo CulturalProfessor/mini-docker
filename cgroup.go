@@ -19,11 +19,11 @@ type limits struct {
 }
 
 // cgroupSetup makes the container's cgroup at /sys/fs/cgroup/minidoc/<id>, turns
-// on the controllers I need, applies the limits, and returns the path.
+// on the controllers we need, applies the limits, and returns the path.
 //
 // In cgroup v2 a controller only works in a child if the parent lists it in
 // cgroup.subtree_control. The root already delegates cpu/memory/pids (systemd did
-// that), so I only delegate one more level, from my "minidoc" cgroup down to each
+// that), so we only delegate one more level, from our "minidoc" cgroup down to each
 // container's leaf.
 func cgroupSetup(id string, lim limits) (string, error) {
 	parent := filepath.Join(cgroupBase, "minidoc")

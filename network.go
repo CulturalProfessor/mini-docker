@@ -8,7 +8,7 @@ import (
 )
 
 // Networking: one host bridge acts as a switch and gateway for every container on
-// a private /24. I connect each container with a veth pair (a virtual cable): one
+// a private /24. We connect each container with a veth pair (a virtual cable): one
 // end on the bridge, the other inside the container as eth0. Outbound traffic is
 // NAT'd (MASQUERADE) so a private IP can reach the internet behind the host.
 const (
@@ -19,7 +19,7 @@ const (
 )
 
 // setupNetworking builds the bridge (once) and connects this container, returning
-// its IP. I use pid to find the container's network namespace.
+// its IP. We use pid to find the container's network namespace.
 func setupNetworking(id string, pid int) (string, error) {
 	if err := ensureBridge(); err != nil {
 		return "", err
@@ -62,8 +62,8 @@ func ensureBridge() error {
 		return err
 	}
 
-	// Allow forwarding to/from the bridge. I insert at the top of FORWARD in case
-	// the default policy is DROP (my host has Docker, so it is).
+	// Allow forwarding to/from the bridge. We insert at the top of FORWARD in case
+	// the default policy is DROP (our host has Docker, so it is).
 	if err := ensureRule(true, "filter", "FORWARD", "-i", bridgeName, "-j", "ACCEPT"); err != nil {
 		return err
 	}
@@ -145,8 +145,8 @@ func ensureRule(insert bool, table, chain string, rule ...string) error {
 	return sh("iptables", add...)
 }
 
-// sh runs a command and returns its output on failure. I shell out to
-// ip/iptables/nsenter for networking so every step is a command I could run by
+// sh runs a command and returns its output on failure. We shell out to
+// ip/iptables/nsenter for networking so every step is a command we could run by
 // hand and inspect.
 func sh(name string, args ...string) error {
 	out, err := exec.Command(name, args...).CombinedOutput()

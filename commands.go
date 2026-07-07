@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"syscall"
 	"text/tabwriter"
 	"time"
 )
@@ -47,16 +48,27 @@ func images(_ []string) {
 	w.Flush()
 }
 
-// dirSize sums the sizes of all regular files under root (best-effort).
+// dirSize sums the sizes of regular files under root (best-effort). It counts
+// each inode once, so hardlinked files (busybox applets, for example) aren't
+// counted hundreds of times.
 func dirSize(root string) int64 {
 	var total int64
+	seen := map[uint64]bool{}
 	_ = filepath.WalkDir(root, func(_ string, d os.DirEntry, err error) error {
 		if err != nil {
 			return nil // skip unreadable entries rather than failing
 		}
-		if info, err := d.Info(); err == nil && info.Mode().IsRegular() {
-			total += info.Size()
+		info, err := d.Info()
+		if err != nil || !info.Mode().IsRegular() {
+			return nil
 		}
+		if st, ok := info.Sys().(*syscall.Stat_t); ok && st.Nlink > 1 {
+			if seen[st.Ino] {
+				return nil // already counted this inode
+			}
+			seen[st.Ino] = true
+		}
+		total += info.Size()
 		return nil
 	})
 	return total
