@@ -1,0 +1,15 @@
+# Built binary
+/minidoc
+
+# Container state, extracted rootfs, overlay dirs (created at runtime)
+/rootfs/
+/images/
+/containers/
+/run/
+
+# Personal notes (interview prep, scratch)
+/docs/
+
+# Editor / OS noise
+*.swp
+.DS_Store
