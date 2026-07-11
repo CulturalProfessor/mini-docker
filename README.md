@@ -29,6 +29,11 @@ the standard library and raw syscalls, no third-party dependencies.
 
 ## Quick start
 
+Fastest way to see everything: `./scripts/demo.sh` walks through build, pull,
+isolation, filesystem, limits, networking, and the CLI, pausing between
+commands. Run just one part with `./scripts/demo.sh network`, or run
+`./scripts/network.sh` (etc.) directly.
+
 ```sh
 go build -o minidoc .
 
