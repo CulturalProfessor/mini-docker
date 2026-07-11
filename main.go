@@ -24,6 +24,8 @@ func main() {
 		pull(os.Args[2:])
 	case "ps":
 		ps(os.Args[2:])
+	case "stats":
+		stats(os.Args[2:])
 	case "images":
 		images(os.Args[2:])
 	case "child":
@@ -40,6 +42,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  minidoc pull <image[:tag]>")
 	fmt.Fprintln(os.Stderr, "  minidoc run [--memory 100m] [--cpus 0.5] [--pids 64] <image> <command> [args...]")
 	fmt.Fprintln(os.Stderr, "  minidoc ps")
+	fmt.Fprintln(os.Stderr, "  minidoc stats [id]")
 	fmt.Fprintln(os.Stderr, "  minidoc images")
 	os.Exit(1)
 }
